@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import * as ejs from 'ejs';
 
-import * as selectorsFile from './templates/selectors';
 
 const capitalizeFirstLetter = (string: string) => 
  string.charAt(0).toUpperCase() + string.slice(1);
@@ -84,10 +83,8 @@ export const generateDeoxFiles = async  (filePath: string) => {
   }
 
   const fieldNames = storeInterface.members.map(field => getName(field));
-
-  const initialState =  Object.fromEntries(storeInterface.members.map(getInitialValues));
   
-  const rawTemplate = selectorsFile.getTemplate(); // fs.readFileSync(path.join(__dirname, './templates/selectors.template.ts.ejs')).toString();
+  const rawTemplate = fs.readFileSync(path.join(__dirname, './templates/selectors.template.ts.ejs')).toString();
   const selectorsTemplate = ejs.compile(rawTemplate);
 
   const stateSelectorName = `get${storeInterfaceName}`;
