@@ -40,6 +40,9 @@ const getStoreName =  (filePath: string) => {
 };
 
 const getName = (field: ts.NamedDeclaration) => (field.name as ts.Identifier).escapedText.toString();
+const getTypeName = (field: ts.TypeReferenceNode) => (field.typeName as ts.Identifier).escapedText.toString();
+
+
 
 const getInterfaceName = (storeName: string) => `${capitalizeFirstLetter(storeName)}State`;
 const getActionsEnumName = (storeName: string) => `${capitalizeFirstLetter(storeName)}ActionTypes`;
@@ -84,6 +87,39 @@ export const generateDeoxFiles = async  (filePath: string) => {
 
   const fieldNames = storeInterface.members.map(field => getName(field));
   
+  const selectors = storeInterface.members.map(field => {
+    const fieldPropertySignature = field as ts.PropertySignature;
+    const fieldName = getName(field);
+
+    let returnType = '';
+
+    if (fieldPropertySignature.type!.kind === ts.SyntaxKind.UnionType) {
+
+      const unionType = fieldPropertySignature.type as ts.UnionTypeNode;
+      
+      returnType = unionType.types.map(type => {
+
+        if (type.kind === ts.SyntaxKind.TypeReference) {
+          const typeReferenceNode = type as ts.TypeReferenceNode;
+          return getTypeName(typeReferenceNode);
+        } else if (type.kind === ts.SyntaxKind.LiteralType) {
+          const literalTypeNode = type as ts.LiteralTypeNode;
+
+          if (literalTypeNode.literal.kind === ts.SyntaxKind.NullKeyword) {
+            return 'null';
+          }
+        }
+
+      }).filter(f => f !== undefined).join('|');
+    }
+    return {
+      name: `get${capitalizeFirstLetter(fieldName)}`,
+      returnType: returnType === '' ?  'any' : returnType,
+      fieldPath: fieldName,
+    };
+  });
+
+
   const rawTemplate = fs.readFileSync(path.join(__dirname, './templates/selectors.template.ts.ejs')).toString();
   const selectorsTemplate = ejs.compile(rawTemplate);
 
@@ -93,20 +129,12 @@ export const generateDeoxFiles = async  (filePath: string) => {
     storeInterfaceName,
     types: [storeInterfaceName, 'News', 'NewsCategory'],
     stateSelectorName,
-    selectors: fieldNames.map(fieldName => ({
-      name: `get${capitalizeFirstLetter(fieldName)}`,
-      returnType: 'any',
-      fieldPath: fieldName,
-    })),
-  };
-
-  console.log(ejsData);
-  
+    selectors,
+  };  
   
   const result = selectorsTemplate(ejsData);
 
   fs.writeFileSync(path.join(path.dirname(filePath), 'selectors.ts'), result);
 
-  console.log(result);
   
 };
