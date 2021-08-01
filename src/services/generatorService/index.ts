@@ -85,36 +85,56 @@ export const generateDeoxFiles = async  (filePath: string) => {
     throw new Error(`Enum ${storeActionEnum} was not found in ${filePath}.`);
   }
 
-  const fieldNames = storeInterface.members.map(field => getName(field));
-  
+  const kindToStringMap: Map<ts.SyntaxKind | undefined, (...params: any[]) => string> = new Map<ts.SyntaxKind | undefined, (...params: any[]) => string>([
+    [undefined, () => 'any'],
+    [ts.SyntaxKind.UnionType, (unionType: ts.UnionTypeNode) => 
+      unionType.types.map(type => kindToStringMap.get(type.kind)?.(type)).filter(f => f !== undefined).join(' | ')
+    ],
+    [ts.SyntaxKind.TypeReference, (typeReferenceNode: ts.TypeReferenceNode) => getTypeName(typeReferenceNode)],
+    [ts.SyntaxKind.LiteralType, (literalTypeNode: ts.LiteralTypeNode) => {
+      return kindToStringMap.get(literalTypeNode.literal.kind)?.() || 'any';
+    }],
+    [ts.SyntaxKind.ArrayType, (arrayType: ts.ArrayTypeNode) => {
+      console.log({ arrayType });
+      return `${kindToStringMap.get(arrayType.elementType.kind)?.(arrayType.elementType) || ''}[]`;
+    }],
+    [ts.SyntaxKind.TypeLiteral, (typeLiteral: ts.TypeLiteralNode)=> {
+      const fields = typeLiteral.members
+        .map((member) => 
+          [
+            getName(member), 
+            kindToStringMap.get((member as  ts.PropertySignature).type?.kind)?.((member as  ts.PropertySignature).type)
+          ]
+        )
+        .map(([name, type]) => `${name}: ${type}`)
+        .join(', ');
+
+      return `{ ${fields} }`;
+    
+    }],
+
+    [ts.SyntaxKind.NullKeyword, () => 'null'],
+    [ts.SyntaxKind.AnyKeyword, () => 'any'],
+    [ts.SyntaxKind.TrueKeyword, () => 'true'],
+    [ts.SyntaxKind.FalseKeyword, () => 'false'],
+    [ts.SyntaxKind.NumberKeyword, () => 'number'],
+    [ts.SyntaxKind.StringKeyword, () => 'string'],
+    [ts.SyntaxKind.BooleanKeyword, () => 'boolean'],
+  ]);
+
   const selectors = storeInterface.members.map(field => {
     const fieldPropertySignature = field as ts.PropertySignature;
     const fieldName = getName(field);
 
-    let returnType = '';
+    console.log('kind: ', ts.SyntaxKind[fieldPropertySignature.kind]);
+    
+    console.log('type: ', ts.SyntaxKind[fieldPropertySignature.type!.kind]);
 
-    if (fieldPropertySignature.type!.kind === ts.SyntaxKind.UnionType) {
-
-      const unionType = fieldPropertySignature.type as ts.UnionTypeNode;
-      
-      returnType = unionType.types.map(type => {
-
-        if (type.kind === ts.SyntaxKind.TypeReference) {
-          const typeReferenceNode = type as ts.TypeReferenceNode;
-          return getTypeName(typeReferenceNode);
-        } else if (type.kind === ts.SyntaxKind.LiteralType) {
-          const literalTypeNode = type as ts.LiteralTypeNode;
-
-          if (literalTypeNode.literal.kind === ts.SyntaxKind.NullKeyword) {
-            return 'null';
-          }
-        }
-
-      }).filter(f => f !== undefined).join('|');
-    }
+    console.log('string: ', kindToStringMap.get(fieldPropertySignature.type?.kind)?.(fieldPropertySignature.type));
+    
     return {
       name: `get${capitalizeFirstLetter(fieldName)}`,
-      returnType: returnType === '' ?  'any' : returnType,
+      returnType: kindToStringMap.get(fieldPropertySignature.type?.kind)?.(fieldPropertySignature.type) || 'any',
       fieldPath: fieldName,
     };
   });
