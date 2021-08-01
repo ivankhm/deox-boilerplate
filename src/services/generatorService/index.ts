@@ -22,6 +22,14 @@ const getStoreInterface = (rootNode: ts.SourceFile, storeInterfaceName: string) 
    });
 };
 
+const getExportedInterfaces = (rootNode: ts.SourceFile) =>  
+  rootNode.statements
+    .filter(statement => 
+      (statement.kind === ts.SyntaxKind.InterfaceDeclaration || statement.kind === ts.SyntaxKind.TypeAliasDeclaration) 
+      && statement.modifiers?.find((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    )
+    .map(child => getName(child as unknown as ts.NamedDeclaration));
+
 const getStoreActionsEnum = (rootNode: ts.SourceFile, storeActionEnumName: string) => {
   return rootNode.forEachChild(child => {
     if (child.kind === ts.SyntaxKind.EnumDeclaration) {
@@ -85,34 +93,35 @@ export const generateDeoxFiles = async  (filePath: string) => {
     throw new Error(`Enum ${storeActionEnum} was not found in ${filePath}.`);
   }
 
+  
+
   const kindToStringMap: Map<ts.SyntaxKind | undefined, (...params: any[]) => string> = new Map<ts.SyntaxKind | undefined, (...params: any[]) => string>([
-    [undefined, () => 'any'],
     [ts.SyntaxKind.UnionType, (unionType: ts.UnionTypeNode) => 
       unionType.types.map(type => kindToStringMap.get(type.kind)?.(type)).filter(f => f !== undefined).join(' | ')
     ],
     [ts.SyntaxKind.TypeReference, (typeReferenceNode: ts.TypeReferenceNode) => getTypeName(typeReferenceNode)],
-    [ts.SyntaxKind.LiteralType, (literalTypeNode: ts.LiteralTypeNode) => {
-      return kindToStringMap.get(literalTypeNode.literal.kind)?.() || 'any';
-    }],
-    [ts.SyntaxKind.ArrayType, (arrayType: ts.ArrayTypeNode) => {
-      console.log({ arrayType });
-      return `${kindToStringMap.get(arrayType.elementType.kind)?.(arrayType.elementType) || ''}[]`;
-    }],
+    [ts.SyntaxKind.LiteralType, 
+      (literalTypeNode: ts.LiteralTypeNode) => kindToStringMap.get(literalTypeNode.literal.kind)?.(literalTypeNode.literal) || 'any'
+    ],
+    [ts.SyntaxKind.ArrayType, (arrayType: ts.ArrayTypeNode) => 
+      `${kindToStringMap.get(arrayType.elementType.kind)?.(arrayType.elementType) || ''}[]`
+    ],
     [ts.SyntaxKind.TypeLiteral, (typeLiteral: ts.TypeLiteralNode)=> {
       const fields = typeLiteral.members
-        .map((member) => 
-          [
-            getName(member), 
-            kindToStringMap.get((member as  ts.PropertySignature).type?.kind)?.((member as  ts.PropertySignature).type)
-          ]
+      .map((member) => 
+        [
+          getName(member), 
+          kindToStringMap.get((member as  ts.PropertySignature).type?.kind)?.((member as  ts.PropertySignature).type)
+        ]
         )
-        .map(([name, type]) => `${name}: ${type}`)
-        .join(', ');
-
-      return `{ ${fields} }`;
-    
+      .map(([name, type]) => `${name}: ${type}`)
+      .join(', ');
+        
+      return `{ ${fields} }`;  
     }],
-
+    
+    [undefined, () => 'any'],
+      
     [ts.SyntaxKind.NullKeyword, () => 'null'],
     [ts.SyntaxKind.AnyKeyword, () => 'any'],
     [ts.SyntaxKind.TrueKeyword, () => 'true'],
@@ -125,12 +134,6 @@ export const generateDeoxFiles = async  (filePath: string) => {
   const selectors = storeInterface.members.map(field => {
     const fieldPropertySignature = field as ts.PropertySignature;
     const fieldName = getName(field);
-
-    console.log('kind: ', ts.SyntaxKind[fieldPropertySignature.kind]);
-    
-    console.log('type: ', ts.SyntaxKind[fieldPropertySignature.type!.kind]);
-
-    console.log('string: ', kindToStringMap.get(fieldPropertySignature.type?.kind)?.(fieldPropertySignature.type));
     
     return {
       name: `get${capitalizeFirstLetter(fieldName)}`,
@@ -147,7 +150,7 @@ export const generateDeoxFiles = async  (filePath: string) => {
   const ejsData = {
     storeName,
     storeInterfaceName,
-    types: [storeInterfaceName, 'News', 'NewsCategory'],
+    types: getExportedInterfaces(rootNode),
     stateSelectorName,
     selectors,
   };  

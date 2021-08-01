@@ -21,12 +21,12 @@ export function activate(context: vscode.ExtensionContext) {
 		// Display a message box to the user
 		
 		vscode.window.showInformationMessage(`Generating from ${textEditor.document.fileName}!`);
-		await generateDeoxFiles(textEditor.document.fileName);
 
-		// try {
-		// } catch (error) {
-		// 	vscode.window.showErrorMessage(error.toString());
-		// }
+		try {
+			await generateDeoxFiles(textEditor.document.fileName);
+		} catch (error) {
+			vscode.window.showErrorMessage(error.toString());
+		}
 
 	});
 

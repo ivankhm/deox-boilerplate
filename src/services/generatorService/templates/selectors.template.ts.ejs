@@ -1,7 +1,7 @@
 import { createSelector } from 'reselect';
 import { ApplicationState } from 'store';
 
-import { <%= types.join(', ') %>  } from './types';
+import { <%= types.join(', ') %> } from './types';
 
 const <%= stateSelectorName %> = (state: ApplicationState) => state.<%= storeName %>;
 <% for(const selector of selectors) { %>
